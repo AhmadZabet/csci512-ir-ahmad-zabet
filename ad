@@ -1,0 +1,25 @@
+ .gitignore               | 5 [32m+++++[m
+ reports/figures/.gitkeep | 0
+ reports/phase1.md        | 0
+ reports/phase2.md        | 0
+ reports/phase3.md        | 0
+ reports/phase4.md        | 0
+ reports/phase5.md        | 0
+ requirements.txt         | 0
+ resources/stoplist.txt   | 0
+ run.py                   | 0
+ src/evaluate.py          | 0
+ src/indexer.py           | 0
+ src/parsers.py           | 0
+ src/search.py            | 0
+ src/stemmer.py           | 0
+ src/stoplist.py          | 0
+ src/text_ops.py          | 0
+ tests/test_evaluate.py   | 0
+ tests/test_indexer.py    | 0
+ tests/test_parsers.py    | 0
+ tests/test_search.py     | 0
+ tests/test_stemmer.py    | 0
+ tests/test_stoplist.py   | 0
+ tests/test_text_ops.py   | 0
+ 24 files changed, 5 insertions(+)
