@@ -6,11 +6,7 @@
 **Instructor:** Dr. Maysaa Khalil  
 **Python:** 3.15.2 used for local testing; Python 3.10 or later required.
 
-## Co-authorship and AI disclosure
-
-This project and its documentation were co-authored by **Ahmad Zabet and ChatGPT (OpenAI)**. ChatGPT contributed draft code, tests, debugging assistance, explanations, and documentation. Ahmad supplied the datasets, ran the project locally, reviewed the outputs, and discussed the design decisions and results.
-
-This disclosure includes assistance with implementation, not only proofreading.
+## Co-authorship: Chatgpt+
 
 ## Current implementation
 
