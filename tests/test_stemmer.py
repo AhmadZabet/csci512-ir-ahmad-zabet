@@ -1,4 +1,4 @@
-"""Tests for Porter's conditions and complete Steps 1–5."""
+"""Tests for original Porter rules and Harman's S-stemmer."""
 
 import unittest
 
@@ -19,6 +19,7 @@ from src.stemmer import (
     step5a,
     step5b,
     porter_stem,
+    s_stem,
 )
 
 
@@ -34,10 +35,10 @@ class ExampleTests(unittest.TestCase):
 
 
 class PorterConditionTests(ExampleTests):
-    """Check the conditions used by the suffix rules."""
+    """Check the conditions used by Porter suffix rules."""
 
     def test_measure_examples(self):
-        """Check Porter's measure against lecture examples."""
+        """Check measure values from the lecture."""
 
         self.check_examples(measure, {
             "": 0,
@@ -50,7 +51,7 @@ class PorterConditionTests(ExampleTests):
         })
 
     def test_contextual_y(self):
-        """Check Y at the start and after vowels/consonants."""
+        """Check initial Y and Y following vowels/consonants."""
 
         self.check_examples(consonants, {
             "yes": [True, False, True],
@@ -59,7 +60,7 @@ class PorterConditionTests(ExampleTests):
         })
 
     def test_contains_vowel(self):
-        """Check vowels in candidate stems."""
+        """Check vowel presence in candidate stems."""
 
         self.check_examples(contains_vowel, {
             "happ": True,
@@ -92,10 +93,10 @@ class PorterConditionTests(ExampleTests):
 
 
 class PorterStep1Tests(ExampleTests):
-    """Check Step 1 rules and their combined behavior."""
+    """Check individual Step 1 rules and their combined behavior."""
 
     def test_step1a(self):
-        """Check plural suffixes and the protective SS rule."""
+        """Check plural rules and the protective SS rule."""
 
         self.check_examples(step1a, {
             "caresses": "caress",
@@ -222,7 +223,7 @@ class PorterSteps2And3Tests(ExampleTests):
         self.assertEqual(step3("ness"), "ness")
 
     def test_original_abli_rule(self):
-        """Use original ABLI behavior without adding a BLI rule."""
+        """Keep original ABLI behavior without adding a BLI rule."""
 
         self.check_examples(step2, {
             "conformabli": "conformable",
@@ -282,17 +283,16 @@ class PorterSteps4And5Tests(ExampleTests):
         })
 
     def test_step4_conditions(self):
-        """Check measure, the ION condition, and longest-match behavior."""
+        """Check measure, ION restrictions, and longest-match behavior."""
 
         self.check_examples(step4, {
-            # Candidate stem mill does not end in S or T.
+            # The remaining stem does not end in S or T.
             "million": "million",
 
-            # Candidate stem fict has m = 1, so ION stays.
+            # The candidate stem's measure is only 1.
             "fiction": "fiction",
 
-            # EMENT matches first, leaving c with m = 0.
-            # Do not fall through to the shorter ENT rule.
+            # EMENT matches first and leaves c with measure 0.
             "cement": "cement",
         })
 
@@ -319,7 +319,7 @@ class PorterSteps4And5Tests(ExampleTests):
         })
 
     def test_complete_porter(self):
-        """Check final stems, including the required lecture examples."""
+        """Check complete stems, including required lecture examples."""
 
         self.check_examples(porter_stem, {
             "generalizations": "gener",
@@ -338,6 +338,63 @@ class PorterSteps4And5Tests(ExampleTests):
             "sky": "sky",
             "": "",
         })
+
+
+class SStemmerTests(ExampleTests):
+    """Check the lighter S-stemmer and compare it with Porter."""
+
+    def test_plural_examples(self):
+        """Check plural changes and preserved US/SS endings."""
+
+        self.check_examples(s_stem, {
+            "ponies": "pony",
+            "horses": "horse",
+            "toes": "toe",
+            "cats": "cat",
+            "flows": "flow",
+            "status": "status",
+            "caress": "caress",
+            "trees": "tree",
+        })
+
+    def test_ies_exceptions(self):
+        """Excluded IES endings can qualify for a later rule."""
+
+        # Artificial strings isolate the AIES/EIES exceptions.
+        self.check_examples(s_stem, {
+            "aies": "aie",
+            "eies": "eie",
+        })
+
+    def test_es_exceptions(self):
+        """Excluded ES endings can still qualify for final S removal."""
+
+        self.check_examples(s_stem, {
+            "algaes": "algae",
+            "trees": "tree",
+            "toes": "toe",
+        })
+
+    def test_unchanged_words(self):
+        """Do not remove ING or derivational suffixes."""
+
+        for word in ("flow", "flowing", "experimental", ""):
+            with self.subTest(word=word):
+                self.assertEqual(s_stem(word), word)
+
+    def test_difference_from_porter(self):
+        """Demonstrate differences between the two algorithms."""
+
+        examples = (
+            ("ponies", "pony", "poni"),
+            ("horses", "horse", "hors"),
+            ("flowing", "flowing", "flow"),
+        )
+
+        for word, light, porter in examples:
+            with self.subTest(word=word):
+                self.assertEqual(s_stem(word), light)
+                self.assertEqual(porter_stem(word), porter)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
-"""Implementation of Porter's original 1980 stemming rules.
+"""Original Porter 1980 rules and Harman's 1991 S-stemmer.
 
-Inputs are lowercase tokens from the project's normalization pipeline.
-This module does not tokenize text or remove stopwords.
+Inputs are lowercase tokens from the normalization pipeline.
+Tokenization and stopword removal happen before stemming.
 """
 
 
@@ -80,16 +80,16 @@ def step1a(word: str) -> str:
 
 
 def step1b(word: str) -> str:
-    """Handle EED, ED, and ING, including cleanup after ED/ING removal."""
+    """Handle EED, ED, and ING, with cleanup after ED/ING removal."""
 
-    # EED must be checked before the shorter ED suffix.
+    # EED must be checked before ED.
     if word.endswith("eed"):
         stem = word[:-3]
 
         if measure(stem) > 0:
             return stem + "ee"
 
-        # A failed EED condition must not fall through to ED.
+        # Do not try ED after a failed EED condition.
         return word
 
     for suffix in ("ed", "ing"):
@@ -99,7 +99,7 @@ def step1b(word: str) -> str:
             if not contains_vowel(stem):
                 return word
 
-            # Cleanup applies only after ED or ING was removed.
+            # Cleanup runs only after ED or ING was removed.
             if stem.endswith(("at", "bl", "iz")):
                 return stem + "e"
 
@@ -117,7 +117,7 @@ def step1b(word: str) -> str:
 
 
 def step1c(word: str) -> str:
-    """Replace final Y with I when the preceding stem contains a vowel."""
+    """Replace final Y with I if the preceding stem contains a vowel."""
 
     if word.endswith("y"):
         stem = word[:-1]
@@ -138,8 +138,7 @@ def step1(word: str) -> str:
     return word
 
 
-# Original Porter 1980 Step 2 rules.
-# Use ABLI -> ABLE rather than the later BLI variant.
+# Original Porter Step 2 uses ABLI -> ABLE.
 STEP2_RULES = (
     ("ational", "ate"),
     ("tional", "tion"),
@@ -199,7 +198,7 @@ STEP4_SUFFIXES = (
 def apply_measured_rules(word, rules, minimum_measure=0):
     """Apply the longest matching suffix if m > minimum_measure.
 
-    If that suffix's condition fails, return the word unchanged.
+    If its condition fails, return the word unchanged.
     Do not try a shorter suffix.
     """
 
@@ -243,8 +242,6 @@ def step4(word: str) -> str:
         if word.endswith(suffix):
             stem = word[:-len(suffix)]
 
-            # Every Step 4 rule requires m > 1.
-            # ION has an additional final-letter condition.
             if (
                 measure(stem) > 1
                 and (
@@ -254,7 +251,7 @@ def step4(word: str) -> str:
             ):
                 return stem
 
-            # Only the longest matching suffix is considered.
+            # A failed longest match ends this step.
             return word
 
     return word
@@ -267,8 +264,6 @@ def step5a(word: str) -> str:
         stem = word[:-1]
         m = measure(stem)
 
-        # Long stems lose E.
-        # With m = 1, preserve E if the stem ends CVC.
         if m > 1 or (m == 1 and not ends_cvc(stem)):
             return stem
 
@@ -297,5 +292,30 @@ def porter_stem(word: str) -> str:
     word = step4(word)
     word = step5a(word)
     word = step5b(word)
+
+    return word
+
+
+def s_stem(word: str) -> str:
+    """Apply Harman's S-stemmer to a lowercase token.
+
+    Use the first rule whose suffix and exception conditions qualify.
+    Unlike Porter, this stemmer handles plural endings only.
+    """
+
+    # Rule 1: IES -> Y, except words ending EIES or AIES.
+    # Example: ponies -> pony.
+    if word.endswith("ies") and not word.endswith(("eies", "aies")):
+        return word[:-3] + "y"
+
+    # Rule 2: ES -> E, except words ending AES, EES, or OES.
+    # Example: horses -> horse.
+    if word.endswith("es") and not word.endswith(("aes", "ees", "oes")):
+        return word[:-1]
+
+    # Rule 3: remove S, except words ending US or SS.
+    # Example: cats -> cat; status and caress stay unchanged.
+    if word.endswith("s") and not word.endswith(("us", "ss")):
+        return word[:-1]
 
     return word
