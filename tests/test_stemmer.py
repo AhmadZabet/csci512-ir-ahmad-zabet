@@ -1,8 +1,4 @@
-"""Tests for Porter's conditions and Steps 1–3.
-
-Run from the repository root:
-python -B -m unittest discover -s tests -p test_stemmer.py -v
-"""
+"""Tests for Porter's conditions and complete Steps 1–5."""
 
 import unittest
 
@@ -19,16 +15,31 @@ from src.stemmer import (
     apply_measured_rules,
     step2,
     step3,
+    step4,
+    step5a,
+    step5b,
+    porter_stem,
 )
 
 
-class PorterConditionTests(unittest.TestCase):
+class ExampleTests(unittest.TestCase):
+    """Provide a reusable helper for testing word/result pairs."""
+
+    def check_examples(self, function, examples):
+        """Run each example as a separately identified subtest."""
+
+        for word, expected in examples.items():
+            with self.subTest(function=function.__name__, word=word):
+                self.assertEqual(function(word), expected)
+
+
+class PorterConditionTests(ExampleTests):
     """Check the conditions used by the suffix rules."""
 
     def test_measure_examples(self):
-        """Check lecture examples for Porter's measure m."""
+        """Check Porter's measure against lecture examples."""
 
-        examples = {
+        self.check_examples(measure, {
             "": 0,
             "by": 0,
             "flow": 1,
@@ -36,77 +47,69 @@ class PorterConditionTests(unittest.TestCase):
             "boundary": 2,
             "syzygy": 2,
             "aerodynamic": 5,
-        }
-
-        for word, expected in examples.items():
-            with self.subTest(word=word):
-                self.assertEqual(measure(word), expected)
+        })
 
     def test_contextual_y(self):
-        """Check initial Y and Y after vowels and consonants."""
+        """Check Y at the start and after vowels/consonants."""
 
-        self.assertEqual(
-            consonants("yes"),
-            [True, False, True],
-        )
-        self.assertEqual(
-            consonants("by"),
-            [True, False],
-        )
-        self.assertEqual(
-            consonants("toy"),
-            [True, False, True],
-        )
+        self.check_examples(consonants, {
+            "yes": [True, False, True],
+            "by": [True, False],
+            "toy": [True, False, True],
+        })
 
     def test_contains_vowel(self):
-        """Check whether candidate stems contain a Porter vowel."""
+        """Check vowels in candidate stems."""
 
-        self.assertTrue(contains_vowel("happ"))
-        self.assertFalse(contains_vowel("sk"))
-        self.assertFalse(contains_vowel(""))
+        self.check_examples(contains_vowel, {
+            "happ": True,
+            "sk": False,
+            "": False,
+        })
 
     def test_double_consonant(self):
         """Repeated vowels must not count as double consonants."""
 
-        self.assertTrue(ends_double_consonant("hopp"))
-        self.assertTrue(ends_double_consonant("fall"))
-        self.assertFalse(ends_double_consonant("see"))
-        self.assertFalse(ends_double_consonant(""))
+        self.check_examples(ends_double_consonant, {
+            "hopp": True,
+            "fall": True,
+            "see": False,
+            "": False,
+        })
 
     def test_cvc(self):
-        """Check CVC endings and the W/X/Y exclusions."""
+        """Check CVC endings and final W/X/Y exclusions."""
 
-        self.assertTrue(ends_cvc("fil"))
-        self.assertTrue(ends_cvc("hop"))
+        self.check_examples(ends_cvc, {
+            "fil": True,
+            "hop": True,
+            "snow": False,
+            "box": False,
+            "toy": False,
+            "fail": False,
+            "": False,
+        })
 
-        for word in ("snow", "box", "toy", "fail", ""):
-            with self.subTest(word=word):
-                self.assertFalse(ends_cvc(word))
 
-
-class PorterStep1Tests(unittest.TestCase):
-    """Check individual Step 1 rules and their combined behavior."""
+class PorterStep1Tests(ExampleTests):
+    """Check Step 1 rules and their combined behavior."""
 
     def test_step1a(self):
         """Check plural suffixes and the protective SS rule."""
 
-        examples = {
+        self.check_examples(step1a, {
             "caresses": "caress",
             "ponies": "poni",
             "ties": "ti",
             "caress": "caress",
             "cats": "cat",
             "flows": "flow",
-        }
-
-        for word, expected in examples.items():
-            with self.subTest(word=word):
-                self.assertEqual(step1a(word), expected)
+        })
 
     def test_step1b(self):
-        """Check suffix conditions and all cleanup branches."""
+        """Check suffix conditions and cleanup branches."""
 
-        examples = {
+        self.check_examples(step1b, {
             "agreed": "agree",
             "feed": "feed",
             "plastered": "plaster",
@@ -124,29 +127,21 @@ class PorterStep1Tests(unittest.TestCase):
             "filing": "file",
             "failing": "fail",
             "snowing": "snow",
-        }
-
-        for word, expected in examples.items():
-            with self.subTest(word=word):
-                self.assertEqual(step1b(word), expected)
+        })
 
     def test_step1c(self):
-        """Check that final Y changes only when its stem has a vowel."""
+        """Check the vowel condition for final Y replacement."""
 
-        examples = {
+        self.check_examples(step1c, {
             "happy": "happi",
             "sky": "sky",
             "boy": "boi",
-        }
-
-        for word, expected in examples.items():
-            with self.subTest(word=word):
-                self.assertEqual(step1c(word), expected)
+        })
 
     def test_complete_step1(self):
-        """Check Steps 1a–1c together in the required order."""
+        """Check Steps 1a–1c in sequence."""
 
-        examples = {
+        self.check_examples(step1, {
             "ponies": "poni",
             "caresses": "caress",
             "agreed": "agree",
@@ -160,20 +155,16 @@ class PorterStep1Tests(unittest.TestCase):
             "sky": "sky",
             "flows": "flow",
             "": "",
-        }
-
-        for word, expected in examples.items():
-            with self.subTest(word=word):
-                self.assertEqual(step1(word), expected)
+        })
 
 
-class PorterSteps2And3Tests(unittest.TestCase):
+class PorterSteps2And3Tests(ExampleTests):
     """Check original Porter Steps 2 and 3."""
 
     def test_step2_rules(self):
         """Check every Step 2 replacement."""
 
-        examples = {
+        self.check_examples(step2, {
             "relational": "relate",
             "conditional": "condition",
             "valenci": "valence",
@@ -194,16 +185,12 @@ class PorterSteps2And3Tests(unittest.TestCase):
             "formaliti": "formal",
             "sensitiviti": "sensitive",
             "sensibiliti": "sensible",
-        }
-
-        for word, expected in examples.items():
-            with self.subTest(word=word):
-                self.assertEqual(step2(word), expected)
+        })
 
     def test_step3_rules(self):
         """Check every Step 3 replacement."""
 
-        examples = {
+        self.check_examples(step3, {
             "triplicate": "triplic",
             "formative": "form",
             "formalize": "formal",
@@ -211,19 +198,13 @@ class PorterSteps2And3Tests(unittest.TestCase):
             "electrical": "electric",
             "hopeful": "hope",
             "goodness": "good",
-        }
-
-        for word, expected in examples.items():
-            with self.subTest(word=word):
-                self.assertEqual(step3(word), expected)
+        })
 
     def test_failed_longest_match_stops_the_step(self):
-        """Do not try a shorter suffix after the longest match fails."""
+        """Do not try a shorter suffix after a failed longest match."""
 
-        # ATIONAL leaves r, whose measure is zero.
         self.assertEqual(step2("rational"), "rational")
 
-        # Even if rules arrive in this order, ATIONAL must be tried first.
         rules = (
             ("tional", "tion"),
             ("ational", "ate"),
@@ -235,20 +216,22 @@ class PorterSteps2And3Tests(unittest.TestCase):
         )
 
     def test_measure_must_be_positive(self):
-        """A suffix with an empty candidate stem must remain unchanged."""
+        """Reject replacements when the candidate stem is empty."""
 
         self.assertEqual(step2("ational"), "ational")
         self.assertEqual(step3("ness"), "ness")
 
     def test_original_abli_rule(self):
-        """Keep original ABLI behavior without adding a BLI rule."""
+        """Use original ABLI behavior without adding a BLI rule."""
 
-        self.assertEqual(step2("conformabli"), "conformable")
-        self.assertEqual(step2("possibly"), "possibly")
-        self.assertEqual(step2("possibli"), "possibli")
+        self.check_examples(step2, {
+            "conformabli": "conformable",
+            "possibly": "possibly",
+            "possibli": "possibli",
+        })
 
     def test_steps_in_sequence(self):
-        """Check intermediate outputs after Steps 1, 2, and 3."""
+        """Check intermediate results after Steps 1–3."""
 
         examples = {
             "generalizations": "general",
@@ -258,10 +241,7 @@ class PorterSteps2And3Tests(unittest.TestCase):
 
         for word, expected in examples.items():
             with self.subTest(word=word):
-                result = step1(word)
-                result = step2(result)
-                result = step3(result)
-
+                result = step3(step2(step1(word)))
                 self.assertEqual(result, expected)
 
     def test_unchanged_and_empty_words(self):
@@ -271,6 +251,93 @@ class PorterSteps2And3Tests(unittest.TestCase):
             with self.subTest(word=word):
                 self.assertEqual(step2(word), word)
                 self.assertEqual(step3(word), word)
+
+
+class PorterSteps4And5Tests(ExampleTests):
+    """Check final suffix removal and cleanup."""
+
+    def test_step4_rules(self):
+        """Check every Step 4 suffix."""
+
+        self.check_examples(step4, {
+            "revival": "reviv",
+            "allowance": "allow",
+            "inference": "infer",
+            "airliner": "airlin",
+            "gyroscopic": "gyroscop",
+            "adjustable": "adjust",
+            "defensible": "defens",
+            "irritant": "irrit",
+            "replacement": "replac",
+            "adjustment": "adjust",
+            "dependent": "depend",
+            "adoption": "adopt",
+            "homologou": "homolog",
+            "communism": "commun",
+            "activate": "activ",
+            "angulariti": "angular",
+            "homologous": "homolog",
+            "effective": "effect",
+            "bowdlerize": "bowdler",
+        })
+
+    def test_step4_conditions(self):
+        """Check measure, the ION condition, and longest-match behavior."""
+
+        self.check_examples(step4, {
+            # Candidate stem mill does not end in S or T.
+            "million": "million",
+
+            # Candidate stem fict has m = 1, so ION stays.
+            "fiction": "fiction",
+
+            # EMENT matches first, leaving c with m = 0.
+            # Do not fall through to the shorter ENT rule.
+            "cement": "cement",
+        })
+
+    def test_step5a(self):
+        """Check final E removal and the short-CVC exception."""
+
+        self.check_examples(step5a, {
+            "probate": "probat",
+            "rate": "rate",
+            "cease": "ceas",
+            "be": "be",
+            "": "",
+        })
+
+    def test_step5b(self):
+        """Reduce LL only when the measure exceeds one."""
+
+        self.check_examples(step5b, {
+            "controll": "control",
+            "roll": "roll",
+            "fall": "fall",
+            "hiss": "hiss",
+            "": "",
+        })
+
+    def test_complete_porter(self):
+        """Check final stems, including the required lecture examples."""
+
+        self.check_examples(porter_stem, {
+            "generalizations": "gener",
+            "oscillators": "oscil",
+            "relational": "relat",
+            "conditional": "condit",
+            "hopefulness": "hope",
+            "compressibility": "compress",
+            "experimental": "experiment",
+            "experiments": "experi",
+            "university": "univers",
+            "universe": "univers",
+            "news": "new",
+            "agreed": "agre",
+            "filing": "file",
+            "sky": "sky",
+            "": "",
+        })
 
 
 if __name__ == "__main__":

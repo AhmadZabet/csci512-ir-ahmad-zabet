@@ -1,7 +1,7 @@
-"""Porter's original stemming algorithm: conditions and Steps 1–3.
+"""Implementation of Porter's original 1980 stemming rules.
 
-Inputs are lowercase words from the normalization pipeline.
-Steps 4 and 5 will be added next.
+Inputs are lowercase tokens from the project's normalization pipeline.
+This module does not tokenize text or remove stopwords.
 """
 
 
@@ -9,7 +9,7 @@ def consonants(word: str) -> list[bool]:
     """Classify characters: True for consonant, False for vowel.
 
     Initial y is a consonant.
-    Otherwise, y takes the opposite classification of the previous letter.
+    Otherwise, y reverses the previous character's classification.
     """
 
     flags = []
@@ -17,10 +17,8 @@ def consonants(word: str) -> list[bool]:
     for letter in word:
         if letter in "aeiou":
             flags.append(False)
-
         elif letter == "y":
             flags.append(True if not flags else not flags[-1])
-
         else:
             flags.append(True)
 
@@ -41,10 +39,7 @@ def measure(word: str) -> int:
 def contains_vowel(word: str) -> bool:
     """Implement *v*: check whether the candidate stem contains a vowel."""
 
-    return any(
-        not flag
-        for flag in consonants(word)
-    )
+    return any(not flag for flag in consonants(word))
 
 
 def ends_double_consonant(word: str) -> bool:
@@ -94,30 +89,25 @@ def step1b(word: str) -> str:
         if measure(stem) > 0:
             return stem + "ee"
 
-        # Do not try ED after a failed EED condition.
+        # A failed EED condition must not fall through to ED.
         return word
 
     for suffix in ("ed", "ing"):
         if word.endswith(suffix):
             stem = word[:-len(suffix)]
 
-            # Removing ED or ING requires a vowel in the candidate stem.
             if not contains_vowel(stem):
                 return word
 
-            # Cleanup runs only after ED or ING was removed.
-
-            # conflat -> conflate; troubl -> trouble; siz -> size.
+            # Cleanup applies only after ED or ING was removed.
             if stem.endswith(("at", "bl", "iz")):
                 return stem + "e"
 
-            # hopp -> hop, but preserve final LL, SS, and ZZ.
             if ends_double_consonant(stem):
                 if stem[-1] not in "lsz":
                     return stem[:-1]
                 return stem
 
-            # fil -> file.
             if measure(stem) == 1 and ends_cvc(stem):
                 return stem + "e"
 
@@ -149,7 +139,7 @@ def step1(word: str) -> str:
 
 
 # Original Porter 1980 Step 2 rules.
-# The original rule is ABLI -> ABLE.
+# Use ABLI -> ABLE rather than the later BLI variant.
 STEP2_RULES = (
     ("ational", "ate"),
     ("tional", "tion"),
@@ -173,7 +163,6 @@ STEP2_RULES = (
     ("biliti", "ble"),
 )
 
-# Original Porter 1980 Step 3 rules.
 STEP3_RULES = (
     ("icate", "ic"),
     ("ative", ""),
@@ -184,12 +173,34 @@ STEP3_RULES = (
     ("ness", ""),
 )
 
+STEP4_SUFFIXES = (
+    "al",
+    "ance",
+    "ence",
+    "er",
+    "ic",
+    "able",
+    "ible",
+    "ant",
+    "ement",
+    "ment",
+    "ent",
+    "ion",
+    "ou",
+    "ism",
+    "ate",
+    "iti",
+    "ous",
+    "ive",
+    "ize",
+)
+
 
 def apply_measured_rules(word, rules, minimum_measure=0):
-    """Apply the longest matching suffix if its stem has sufficient m.
+    """Apply the longest matching suffix if m > minimum_measure.
 
-    The condition is m > minimum_measure.
-    If the longest match fails its condition, return the word unchanged.
+    If that suffix's condition fails, return the word unchanged.
+    Do not try a shorter suffix.
     """
 
     ordered_rules = sorted(
@@ -202,31 +213,89 @@ def apply_measured_rules(word, rules, minimum_measure=0):
         if word.endswith(suffix):
             stem = word[:-len(suffix)]
 
-            # Test m on the candidate stem, excluding the suffix.
             if measure(stem) > minimum_measure:
                 return stem + replacement
 
-            # Never fall through to a shorter matching suffix.
             return word
 
     return word
 
 
 def step2(word: str) -> str:
-    """Simplify a Step 2 suffix when the candidate stem has m > 0."""
+    """Simplify a Step 2 suffix when its candidate stem has m > 0."""
 
-    return apply_measured_rules(
-        word,
-        STEP2_RULES,
-        minimum_measure=0,
-    )
+    return apply_measured_rules(word, STEP2_RULES, minimum_measure=0)
 
 
 def step3(word: str) -> str:
-    """Simplify a Step 3 suffix when the candidate stem has m > 0."""
+    """Simplify a Step 3 suffix when its candidate stem has m > 0."""
 
-    return apply_measured_rules(
-        word,
-        STEP3_RULES,
-        minimum_measure=0,
-    )
+    return apply_measured_rules(word, STEP3_RULES, minimum_measure=0)
+
+
+def step4(word: str) -> str:
+    """Remove one suffix when its candidate stem has m > 1.
+
+    ION also requires the remaining stem to end in S or T.
+    """
+
+    for suffix in sorted(STEP4_SUFFIXES, key=len, reverse=True):
+        if word.endswith(suffix):
+            stem = word[:-len(suffix)]
+
+            # Every Step 4 rule requires m > 1.
+            # ION has an additional final-letter condition.
+            if (
+                measure(stem) > 1
+                and (
+                    suffix != "ion"
+                    or stem.endswith(("s", "t"))
+                )
+            ):
+                return stem
+
+            # Only the longest matching suffix is considered.
+            return word
+
+    return word
+
+
+def step5a(word: str) -> str:
+    """Remove final E when the measure and CVC conditions allow it."""
+
+    if word.endswith("e"):
+        stem = word[:-1]
+        m = measure(stem)
+
+        # Long stems lose E.
+        # With m = 1, preserve E if the stem ends CVC.
+        if m > 1 or (m == 1 and not ends_cvc(stem)):
+            return stem
+
+    return word
+
+
+def step5b(word: str) -> str:
+    """Reduce final LL to L when the word has m > 1."""
+
+    if (
+        word.endswith("ll")
+        and ends_double_consonant(word)
+        and measure(word) > 1
+    ):
+        return word[:-1]
+
+    return word
+
+
+def porter_stem(word: str) -> str:
+    """Apply the complete original Porter sequence once."""
+
+    word = step1(word)
+    word = step2(word)
+    word = step3(word)
+    word = step4(word)
+    word = step5a(word)
+    word = step5b(word)
+
+    return word
