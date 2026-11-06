@@ -6,7 +6,9 @@
 **Instructor:** Dr. Maysaa Khalil  
 **Python:** 3.15.2 used for local testing; Python 3.10 or later required.
 
+
 ## Co-authorship: Chatgpt+
+
 
 ## Current implementation
 
