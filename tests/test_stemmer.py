@@ -1,4 +1,4 @@
-"""Tests for Porter's conditions and Step 1.
+"""Tests for Porter's conditions and Steps 1–3.
 
 Run from the repository root:
 python -B -m unittest discover -s tests -p test_stemmer.py -v
@@ -16,6 +16,9 @@ from src.stemmer import (
     step1b,
     step1c,
     step1,
+    apply_measured_rules,
+    step2,
+    step3,
 )
 
 
@@ -46,12 +49,10 @@ class PorterConditionTests(unittest.TestCase):
             consonants("yes"),
             [True, False, True],
         )
-
         self.assertEqual(
             consonants("by"),
             [True, False],
         )
-
         self.assertEqual(
             consonants("toy"),
             [True, False, True],
@@ -69,12 +70,11 @@ class PorterConditionTests(unittest.TestCase):
 
         self.assertTrue(ends_double_consonant("hopp"))
         self.assertTrue(ends_double_consonant("fall"))
-
         self.assertFalse(ends_double_consonant("see"))
         self.assertFalse(ends_double_consonant(""))
 
     def test_cvc(self):
-        """Check CVC endings, including the W/X/Y exclusions."""
+        """Check CVC endings and the W/X/Y exclusions."""
 
         self.assertTrue(ends_cvc("fil"))
         self.assertTrue(ends_cvc("hop"))
@@ -144,7 +144,7 @@ class PorterStep1Tests(unittest.TestCase):
                 self.assertEqual(step1c(word), expected)
 
     def test_complete_step1(self):
-        """Check Steps 1a–1c together, in the required order."""
+        """Check Steps 1a–1c together in the required order."""
 
         examples = {
             "ponies": "poni",
@@ -165,6 +165,112 @@ class PorterStep1Tests(unittest.TestCase):
         for word, expected in examples.items():
             with self.subTest(word=word):
                 self.assertEqual(step1(word), expected)
+
+
+class PorterSteps2And3Tests(unittest.TestCase):
+    """Check original Porter Steps 2 and 3."""
+
+    def test_step2_rules(self):
+        """Check every Step 2 replacement."""
+
+        examples = {
+            "relational": "relate",
+            "conditional": "condition",
+            "valenci": "valence",
+            "hesitanci": "hesitance",
+            "digitizer": "digitize",
+            "conformabli": "conformable",
+            "radicalli": "radical",
+            "differentli": "different",
+            "vileli": "vile",
+            "analogousli": "analogous",
+            "vietnamization": "vietnamize",
+            "predication": "predicate",
+            "operator": "operate",
+            "feudalism": "feudal",
+            "decisiveness": "decisive",
+            "hopefulness": "hopeful",
+            "callousness": "callous",
+            "formaliti": "formal",
+            "sensitiviti": "sensitive",
+            "sensibiliti": "sensible",
+        }
+
+        for word, expected in examples.items():
+            with self.subTest(word=word):
+                self.assertEqual(step2(word), expected)
+
+    def test_step3_rules(self):
+        """Check every Step 3 replacement."""
+
+        examples = {
+            "triplicate": "triplic",
+            "formative": "form",
+            "formalize": "formal",
+            "electriciti": "electric",
+            "electrical": "electric",
+            "hopeful": "hope",
+            "goodness": "good",
+        }
+
+        for word, expected in examples.items():
+            with self.subTest(word=word):
+                self.assertEqual(step3(word), expected)
+
+    def test_failed_longest_match_stops_the_step(self):
+        """Do not try a shorter suffix after the longest match fails."""
+
+        # ATIONAL leaves r, whose measure is zero.
+        self.assertEqual(step2("rational"), "rational")
+
+        # Even if rules arrive in this order, ATIONAL must be tried first.
+        rules = (
+            ("tional", "tion"),
+            ("ational", "ate"),
+        )
+
+        self.assertEqual(
+            apply_measured_rules("rational", rules),
+            "rational",
+        )
+
+    def test_measure_must_be_positive(self):
+        """A suffix with an empty candidate stem must remain unchanged."""
+
+        self.assertEqual(step2("ational"), "ational")
+        self.assertEqual(step3("ness"), "ness")
+
+    def test_original_abli_rule(self):
+        """Keep original ABLI behavior without adding a BLI rule."""
+
+        self.assertEqual(step2("conformabli"), "conformable")
+        self.assertEqual(step2("possibly"), "possibly")
+        self.assertEqual(step2("possibli"), "possibli")
+
+    def test_steps_in_sequence(self):
+        """Check intermediate outputs after Steps 1, 2, and 3."""
+
+        examples = {
+            "generalizations": "general",
+            "hopefulness": "hope",
+            "compressibility": "compressible",
+        }
+
+        for word, expected in examples.items():
+            with self.subTest(word=word):
+                result = step1(word)
+                result = step2(result)
+                result = step3(result)
+
+                self.assertEqual(result, expected)
+
+    def test_unchanged_and_empty_words(self):
+        """Pass through words without applicable suffixes."""
+
+        for word in ("flow", "wing", ""):
+            with self.subTest(word=word):
+                self.assertEqual(step2(word), word)
+                self.assertEqual(step3(word), word)
 
 
 if __name__ == "__main__":
