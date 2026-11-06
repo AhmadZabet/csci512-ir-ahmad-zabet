@@ -1,6 +1,13 @@
-"""Tests for original Porter, Harman's S-stemmer, and cached stemming."""
+"""Tests for Porter, the S-stemmer, caching, and NLTK agreement.
+
+NLTK is used only here as a reference, not in the processing pipeline.
+The whole-vocabulary check requires completed Phase 2 outputs.
+"""
 
 from collections import Counter
+import csv
+import json
+from pathlib import Path
 import unittest
 from unittest.mock import Mock
 
@@ -289,13 +296,8 @@ class PorterSteps4And5Tests(ExampleTests):
         """Check measure, ION restrictions, and longest-match behavior."""
 
         self.check_examples(step4, {
-            # Remaining stem does not end in S or T.
             "million": "million",
-
-            # Candidate stem has measure 1.
             "fiction": "fiction",
-
-            # EMENT matches first, leaving c with measure 0.
             "cement": "cement",
         })
 
@@ -363,7 +365,6 @@ class SStemmerTests(ExampleTests):
     def test_ies_exceptions(self):
         """Excluded IES endings can qualify for a later rule."""
 
-        # Artificial strings isolate the exception conditions.
         self.check_examples(s_stem, {
             "aies": "aie",
             "eies": "eie",
@@ -416,7 +417,6 @@ class CachedCollectionTests(unittest.TestCase):
 
         result, before, after, cache = stem_collection(documents, stem)
 
-        # Four tokens, but only two distinct words.
         self.assertEqual(stem.call_count, 2)
 
         self.assertEqual(result, {
@@ -471,6 +471,178 @@ class CachedCollectionTests(unittest.TestCase):
         self.assertEqual(documents, {
             8: ["flows", "flowing"],
         })
+
+
+class NltkComparisonTests(unittest.TestCase):
+    """Compare every word in each saved Phase 2 vocabulary with NLTK."""
+
+    def test_whole_vocabularies(self):
+        """Save agreement reports and detect stale maps or mismatches."""
+
+        # NLTK is imported only inside this reference check.
+        import nltk
+        from nltk.stem.porter import PorterStemmer
+
+        # The default NLTK mode adds extensions, so select original explicitly.
+        reference = PorterStemmer(
+            mode=PorterStemmer.ORIGINAL_ALGORITHM
+        )
+
+        summary = []
+
+        for collection in ("med", "cran", "cisi", "lisa", "npl"):
+            with self.subTest(collection=collection):
+                folder = Path("out") / collection
+                path = folder / "porter_word_stems.csv"
+
+                self.assertTrue(
+                    path.is_file(),
+                    f"Run phase2 for {collection} first",
+                )
+
+                # This mapping contains one row per distinct input word.
+                with path.open(
+                    encoding="utf-8",
+                    newline="",
+                ) as stream:
+                    rows = list(csv.DictReader(stream))
+
+                stats = json.loads(
+                    (folder / "phase2_stats.json").read_text(
+                        encoding="utf-8"
+                    )
+                )
+
+                # Check vocabulary size and reject duplicate word rows.
+                self.assertEqual(
+                    len(rows),
+                    stats["methods"]["porter"]["M_before"],
+                )
+                self.assertEqual(
+                    len({row["word"] for row in rows}),
+                    len(rows),
+                )
+
+                mismatches = []
+                stale = []
+                fallback_words = []
+
+                for row in rows:
+                    word = row["word"]
+
+                    # Recompute our result using the current implementation.
+                    actual = porter_stem(word)
+                    expected = reference.stem(word)
+
+                    # Saved outputs must reflect the current code.
+                    if (
+                        row["raw_stem"] != actual
+                        or row["output_stem"] != (actual or word)
+                    ):
+                        stale.append(word)
+
+                    # Compare raw algorithm results without output fallback.
+                    if actual != expected:
+                        mismatches.append([
+                            word,
+                            actual,
+                            expected,
+                        ])
+
+                    if not actual:
+                        fallback_words.append(word)
+
+                total = len(rows)
+                matches = total - len(mismatches)
+
+                agreement = (
+                    100 * matches / total
+                    if total
+                    else None
+                )
+
+                report = {
+                    "collection": collection,
+                    "nltk_version": nltk.__version__,
+                    "reference_mode": "ORIGINAL_ALGORITHM",
+                    "comparison": (
+                        "Raw porter_stem output against raw NLTK output."
+                    ),
+                    "vocabulary_size": total,
+                    "matching_words": matches,
+                    "mismatching_words": len(mismatches),
+                    "agreement_percent": agreement,
+                    "stale_saved_words": stale,
+                    "empty_stem_fallback_words": fallback_words,
+                    "empty_stem_note": (
+                        "Output files preserve the original word when "
+                        "the raw stem is empty. Raw comparison does "
+                        "not apply this fallback."
+                    ),
+                }
+
+                # Save results before assertions so failures can be inspected.
+                (folder / "nltk_comparison.json").write_text(
+                    json.dumps(report, indent=2) + "\n",
+                    encoding="utf-8",
+                )
+
+                with (folder / "nltk_mismatches.csv").open(
+                    "w",
+                    encoding="utf-8",
+                    newline="",
+                ) as stream:
+                    writer = csv.writer(stream)
+                    writer.writerow([
+                        "word",
+                        "our_raw_stem",
+                        "nltk_raw_stem",
+                    ])
+                    writer.writerows(mismatches)
+
+                summary.append([
+                    collection,
+                    total,
+                    matches,
+                    len(mismatches),
+                    agreement,
+                    nltk.__version__,
+                ])
+
+                if agreement is not None:
+                    print(
+                        f"\n{collection.upper()}: "
+                        f"{matches}/{total} raw stems agree "
+                        f"({agreement:.2f}%)"
+                    )
+
+                self.assertEqual(
+                    stale,
+                    [],
+                    "Saved maps are stale; rerun phase2",
+                )
+                self.assertEqual(
+                    mismatches,
+                    [],
+                    "Inspect nltk_mismatches.csv",
+                )
+
+        # Save a combined table for all five collections.
+        with (Path("out") / "nltk_comparison.csv").open(
+            "w",
+            encoding="utf-8",
+            newline="",
+        ) as stream:
+            writer = csv.writer(stream)
+            writer.writerow([
+                "collection",
+                "vocabulary_size",
+                "matching_words",
+                "mismatching_words",
+                "agreement_percent",
+                "nltk_version",
+            ])
+            writer.writerows(summary)
 
 
 if __name__ == "__main__":
