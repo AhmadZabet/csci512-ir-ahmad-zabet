@@ -1,6 +1,8 @@
-"""Tests for original Porter rules and Harman's S-stemmer."""
+"""Tests for original Porter, Harman's S-stemmer, and cached stemming."""
 
+from collections import Counter
 import unittest
+from unittest.mock import Mock
 
 from src.stemmer import (
     consonants,
@@ -20,6 +22,7 @@ from src.stemmer import (
     step5b,
     porter_stem,
     s_stem,
+    stem_collection,
 )
 
 
@@ -93,7 +96,7 @@ class PorterConditionTests(ExampleTests):
 
 
 class PorterStep1Tests(ExampleTests):
-    """Check individual Step 1 rules and their combined behavior."""
+    """Check Step 1 rules and their combined behavior."""
 
     def test_step1a(self):
         """Check plural rules and the protective SS rule."""
@@ -286,13 +289,13 @@ class PorterSteps4And5Tests(ExampleTests):
         """Check measure, ION restrictions, and longest-match behavior."""
 
         self.check_examples(step4, {
-            # The remaining stem does not end in S or T.
+            # Remaining stem does not end in S or T.
             "million": "million",
 
-            # The candidate stem's measure is only 1.
+            # Candidate stem has measure 1.
             "fiction": "fiction",
 
-            # EMENT matches first and leaves c with measure 0.
+            # EMENT matches first, leaving c with measure 0.
             "cement": "cement",
         })
 
@@ -319,7 +322,7 @@ class PorterSteps4And5Tests(ExampleTests):
         })
 
     def test_complete_porter(self):
-        """Check complete stems, including required lecture examples."""
+        """Check complete stems and required lecture examples."""
 
         self.check_examples(porter_stem, {
             "generalizations": "gener",
@@ -360,14 +363,14 @@ class SStemmerTests(ExampleTests):
     def test_ies_exceptions(self):
         """Excluded IES endings can qualify for a later rule."""
 
-        # Artificial strings isolate the AIES/EIES exceptions.
+        # Artificial strings isolate the exception conditions.
         self.check_examples(s_stem, {
             "aies": "aie",
             "eies": "eie",
         })
 
     def test_es_exceptions(self):
-        """Excluded ES endings can still qualify for final S removal."""
+        """Excluded ES endings can qualify for final S removal."""
 
         self.check_examples(s_stem, {
             "algaes": "algae",
@@ -383,7 +386,7 @@ class SStemmerTests(ExampleTests):
                 self.assertEqual(s_stem(word), word)
 
     def test_difference_from_porter(self):
-        """Demonstrate differences between the two algorithms."""
+        """Demonstrate differences between the algorithms."""
 
         examples = (
             ("ponies", "pony", "poni"),
@@ -395,6 +398,79 @@ class SStemmerTests(ExampleTests):
             with self.subTest(word=word):
                 self.assertEqual(s_stem(word), light)
                 self.assertEqual(porter_stem(word), porter)
+
+
+class CachedCollectionTests(unittest.TestCase):
+    """Check caching and preserved document structure."""
+
+    def test_cache_calls(self):
+        """Each distinct word must invoke the stemmer only once."""
+
+        stem = Mock(side_effect=porter_stem)
+
+        documents = {
+            7: ["flows", "flowing", "flows"],
+            42: ["flowing"],
+            99: [],
+        }
+
+        result, before, after, cache = stem_collection(documents, stem)
+
+        # Four tokens, but only two distinct words.
+        self.assertEqual(stem.call_count, 2)
+
+        self.assertEqual(result, {
+            7: ["flow", "flow", "flow"],
+            42: ["flow"],
+            99: [],
+        })
+
+        self.assertEqual(dict(before), {
+            "flows": 2,
+            "flowing": 2,
+        })
+
+        self.assertEqual(dict(after), {
+            "flow": 4,
+        })
+
+        self.assertEqual(cache, {
+            "flows": "flow",
+            "flowing": "flow",
+        })
+
+    def test_s_stemmer(self):
+        """The collection function must support the S-stemmer too."""
+
+        result, _, _, _ = stem_collection(
+            {1: ["ponies", "horses", "flowing"]},
+            s_stem,
+        )
+
+        self.assertEqual(result, {
+            1: ["pony", "horse", "flowing"],
+        })
+
+    def test_empty_input(self):
+        """An empty collection should produce empty outputs."""
+
+        self.assertEqual(
+            stem_collection({}, porter_stem),
+            ({}, Counter(), Counter(), {}),
+        )
+
+    def test_input_unchanged(self):
+        """Stemming must not modify the original token lists."""
+
+        documents = {
+            8: ["flows", "flowing"],
+        }
+
+        stem_collection(documents, porter_stem)
+
+        self.assertEqual(documents, {
+            8: ["flows", "flowing"],
+        })
 
 
 if __name__ == "__main__":

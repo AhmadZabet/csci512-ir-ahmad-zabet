@@ -1,8 +1,10 @@
-"""Original Porter 1980 rules and Harman's 1991 S-stemmer.
+"""Original Porter 1980 rules, Harman's S-stemmer, and cached stemming.
 
 Inputs are lowercase tokens from the normalization pipeline.
 Tokenization and stopword removal happen before stemming.
 """
+
+from collections import Counter
 
 
 def consonants(word: str) -> list[bool]:
@@ -300,22 +302,60 @@ def s_stem(word: str) -> str:
     """Apply Harman's S-stemmer to a lowercase token.
 
     Use the first rule whose suffix and exception conditions qualify.
-    Unlike Porter, this stemmer handles plural endings only.
+    This light stemmer handles plural endings only.
     """
 
-    # Rule 1: IES -> Y, except words ending EIES or AIES.
-    # Example: ponies -> pony.
+    # Rule 1: IES -> Y, except EIES or AIES.
     if word.endswith("ies") and not word.endswith(("eies", "aies")):
         return word[:-3] + "y"
 
-    # Rule 2: ES -> E, except words ending AES, EES, or OES.
-    # Example: horses -> horse.
+    # Rule 2: ES -> E, except AES, EES, or OES.
     if word.endswith("es") and not word.endswith(("aes", "ees", "oes")):
         return word[:-1]
 
-    # Rule 3: remove S, except words ending US or SS.
-    # Example: cats -> cat; status and caress stay unchanged.
+    # Rule 3: remove S, except US or SS.
     if word.endswith("s") and not word.endswith(("us", "ss")):
         return word[:-1]
 
     return word
+
+
+def stem_collection(documents, stem):
+    """Stem documents, caching each distinct word's result.
+
+    Arguments:
+        documents: {document_id: [tokens]}
+        stem: a function such as porter_stem or s_stem
+
+    Returns:
+        stemmed: {document_id: [stems]}
+        before: Counter of original token occurrences
+        after: Counter of stem occurrences
+        cache: {original_word: stem}
+
+    The input documents are not modified.
+    """
+
+    # One cache is shared across all documents in this collection.
+    cache = {}
+    stemmed = {}
+    before, after = Counter(), Counter()
+
+    for doc_id, terms in documents.items():
+        result = []
+
+        for word in terms:
+            # Compute each distinct word's stem only once.
+            if word not in cache:
+                cache[word] = stem(word)
+
+            # Preserve order and repeated occurrences.
+            result.append(cache[word])
+
+        # Preserve original IDs, including empty documents.
+        stemmed[doc_id] = result
+
+        before.update(terms)
+        after.update(result)
+
+    return stemmed, before, after, cache
